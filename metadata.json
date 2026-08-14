@@ -1,0 +1,6 @@
+{
+  "name": "Reservas de Espacios CITRO",
+  "description": "Aplicación para la gestión de solicitudes y reservas de espacios físicos del CITRO.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

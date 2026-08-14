@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: var(--theme-paper);
+  --color-forest: var(--theme-forest);
+  --color-forest-light: var(--theme-forest-light);
+  --color-orchid: var(--theme-orchid);
+  --color-orchid-light: var(--theme-orchid-light);
+  --color-amber-warm: var(--theme-amber-warm);
+  --color-border: var(--theme-border);
+  --color-surface: var(--theme-surface);
+  --color-surface-alt: var(--theme-surface-alt);
+  
+  --font-serif: 'Fraunces', serif;
+  --font-sans: 'Work Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+:root {
+  --theme-paper: #F3F4F0;
+  --theme-forest: #1A3C34;
+  --theme-forest-light: #2A5A4F;
+  --theme-orchid: #9B2B6B;
+  --theme-orchid-light: #C04B8C;
+  --theme-amber-warm: #D48924;
+  --theme-border: #E5E7E1;
+  --theme-surface: #ffffff;
+  --theme-surface-alt: #FAFAFA;
+}
+
+.dark {
+  --theme-paper: #121A18;
+  --theme-forest: #EAF0EE;
+  --theme-forest-light: #A5B8B2;
+  --theme-orchid: #D882B3;
+  --theme-orchid-light: #EAA4CD;
+  --theme-amber-warm: #F4B251;
+  --theme-border: #243530;
+  --theme-surface: #18221F;
+  --theme-surface-alt: #1F2C28;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-forest);
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
