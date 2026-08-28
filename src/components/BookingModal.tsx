@@ -76,7 +76,7 @@ export function BookingModal({ isOpen, onClose, initialSpace, initialDate, onSuc
 
             <div>
               <label className="block text-sm font-medium text-forest mb-1">Fecha</label>
-              <input type="date" name="date" defaultValue={initialDate || format(new Date(), 'yyyy-MM-dd')} required className="w-full px-4 py-2.5 rounded-xl border border-border bg-surface text-forest font-mono focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest transition-all" />
+              <input type="date" name="date" min={format(new Date(), 'yyyy-MM-dd')} defaultValue={initialDate || format(new Date(), 'yyyy-MM-dd')} required className="w-full px-4 py-2.5 rounded-xl border border-border bg-surface text-forest font-mono focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest transition-all" />
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -19,7 +19,7 @@ export function WeeklyCalendar({ reservations, onRequestSlot }: WeeklyCalendarPr
   const days = Array.from({ length: 7 }).map((_, i) => addDays(currentWeek, i));
 
   const getReservationsForSlot = (spaceName: string, dateString: string) => {
-    return reservations.filter(r => r.space === spaceName && r.date === dateString && r.status !== 'REJECTED');
+    return reservations.filter(r => r.space === spaceName && r.date === dateString && r.status !== 'REJECTED' && r.status !== 'CANCELLED');
   };
 
   return (

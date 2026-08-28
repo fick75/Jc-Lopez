@@ -16,6 +16,7 @@ export function RecentRequests({ reservations }: RecentRequestsProps) {
     switch (status) {
       case 'CONFIRMED': return { icon: <CheckCircle2 className="w-4 h-4 text-forest" />, text: 'Aprobada', bg: 'bg-forest/10 text-forest' };
       case 'REJECTED': return { icon: <XCircle className="w-4 h-4 text-red-600" />, text: 'Rechazada', bg: 'bg-red-50 text-red-700' };
+      case 'CANCELLED': return { icon: <XCircle className="w-4 h-4 text-forest-light" />, text: 'Cancelada', bg: 'bg-forest/5 text-forest-light' };
       default: return { icon: <Clock className="w-4 h-4 text-amber-warm" />, text: 'Pendiente', bg: 'bg-amber-warm/10 text-amber-warm' };
     }
   };

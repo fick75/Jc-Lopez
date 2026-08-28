@@ -7,12 +7,12 @@ export interface Reservation {
   name: string;
   email: string;
   reason: string;
-  status: 'PENDING' | 'CONFIRMED' | 'REJECTED';
+  status: 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'CANCELLED';
   createdAt: string;
 }
 
 export const SPACES = [
-  { id: 'sum', name: 'Salón de Usos Múltiples' },
-  { id: 'posgrado', name: 'Salón Posgrado Orquidario' },
-  { id: 'auditorio', name: 'Auditorio Orquidario' }
+  { id: 'sum', name: 'Salón de Usos Múltiples', capacity: 40 },
+  { id: 'posgrado', name: 'Salón Posgrado Orquidario', capacity: 20 },
+  { id: 'auditorio', name: 'Auditorio Orquidario', capacity: 80 }
 ];

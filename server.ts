@@ -4,7 +4,8 @@ import { createServer as createViteServer } from "vite";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "./src/db/index.ts";
 import { reservations, admins } from "./src/db/schema.ts";
-import { eq, and, or, gte, lte } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { SPACES } from "./src/types.ts";
 
 async function startServer() {
   const app = express();
@@ -41,21 +42,17 @@ async function startServer() {
         return res.status(400).json({ error: "La hora de inicio debe ser anterior a la hora de fin" });
       }
 
-      // Check for overlaps for confirmed reservations
-      const overlapping = await db.select().from(reservations).where(
-        and(
-          eq(reservations.space, space),
-          eq(reservations.date, date),
-          eq(reservations.status, 'CONFIRMED'),
-          or(
-            and(lte(reservations.startTime, startTime), gte(reservations.endTime, startTime)), // Starts during an existing
-            and(lte(reservations.startTime, endTime), gte(reservations.endTime, endTime)),     // Ends during an existing
-            and(gte(reservations.startTime, startTime), lte(reservations.endTime, endTime))    // Contains an existing completely
-          )
-        )
-      );
+      if (!SPACES.some(s => s.name === space)) {
+        return res.status(400).json({ error: "El espacio seleccionado no es válido" });
+      }
 
-      // A simple logic check: we can't overlap if new start < existing end AND new end > existing start
+      const today = new Date().toISOString().slice(0, 10);
+      if (date < today) {
+        return res.status(400).json({ error: "No se pueden solicitar fechas pasadas" });
+      }
+
+      // Only CONFIRMED reservations block a slot; multiple PENDING requests may
+      // compete for the same slot and an admin decides which one to approve.
       const overlappingStrict = await db.select().from(reservations).where(
         and(
           eq(reservations.space, space),
@@ -63,7 +60,7 @@ async function startServer() {
           eq(reservations.status, 'CONFIRMED')
         )
       );
-      
+
       const hasConflict = overlappingStrict.some(existing => {
         return startTime < existing.endTime && endTime > existing.startTime;
       });
@@ -243,7 +240,21 @@ async function startServer() {
       }
       
       const reservation = reservationArray[0];
-      
+
+      const validTransitions: Record<string, string[]> = {
+        CONFIRMED: ['PENDING'],
+        REJECTED: ['PENDING'],
+        CANCELLED: ['CONFIRMED'],
+      };
+
+      if (!validTransitions[status]) {
+        return res.status(400).json({ error: "Estado no válido" });
+      }
+
+      if (!validTransitions[status].includes(reservation.status)) {
+        return res.status(400).json({ error: `No se puede pasar de ${reservation.status} a ${status}` });
+      }
+
       if (status === 'CONFIRMED') {
         const overlappingStrict = await db.select().from(reservations).where(
           and(
@@ -252,7 +263,7 @@ async function startServer() {
             eq(reservations.status, 'CONFIRMED')
           )
         );
-        
+
         const hasConflict = overlappingStrict.some(existing => {
           return existing.id !== reservation.id && (reservation.startTime < existing.endTime && reservation.endTime > existing.startTime);
         });
@@ -263,7 +274,7 @@ async function startServer() {
       }
 
       await db.update(reservations).set({ status }).where(eq(reservations.id, parseInt(id)));
-      
+
       if (status === 'CONFIRMED') {
         sendEmail(
           reservation.email,
@@ -276,8 +287,14 @@ async function startServer() {
           "Tu solicitud de espacio en CITRO fue RECHAZADA",
           `Hola ${reservation.name},\n\nLamentamos informarte que tu solicitud para usar ${reservation.space} el día ${reservation.date} de ${reservation.startTime} a ${reservation.endTime} ha sido RECHAZADA.\n\nSi tienes dudas, contacta a la administración.`
         );
+      } else if (status === 'CANCELLED') {
+        sendEmail(
+          reservation.email,
+          "Tu reserva de espacio en CITRO fue CANCELADA",
+          `Hola ${reservation.name},\n\nTu reserva para usar ${reservation.space} el día ${reservation.date} de ${reservation.startTime} a ${reservation.endTime} ha sido CANCELADA por la administración.\n\nSi tienes dudas, contacta a la administración.`
+        );
       }
-      
+
       res.json({ success: true, status });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

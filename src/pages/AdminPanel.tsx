@@ -12,7 +12,7 @@ interface AdminUser {
 }
 
 export function AdminPanel() {
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(() => sessionStorage.getItem('citro_admin_pwd') || '');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,29 +25,48 @@ export function AdminPanel() {
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [addAdminLoading, setAddAdminLoading] = useState(false);
 
+  const login = async (pwd: string) => {
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd }),
+    });
+    if (!res.ok) throw new Error('Contraseña incorrecta');
+    sessionStorage.setItem('citro_admin_pwd', pwd);
+    setIsAuthenticated(true);
+  };
+
+  // Restore session on page reload without re-prompting for the password
+  useEffect(() => {
+    const stored = sessionStorage.getItem('citro_admin_pwd');
+    if (stored) {
+      login(stored).then(fetchData).catch(() => {
+        sessionStorage.removeItem('citro_admin_pwd');
+        setPassword('');
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setLoginError('');
 
     try {
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-
-      if (!res.ok) {
-        throw new Error('Contraseña incorrecta');
-      }
-
-      setIsAuthenticated(true);
+      await login(password);
       fetchData();
     } catch (err: any) {
       setLoginError(err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('citro_admin_pwd');
+    setIsAuthenticated(false);
+    setPassword('');
   };
 
   const fetchData = async () => {
@@ -63,11 +82,11 @@ export function AdminPanel() {
     }
   };
 
-  const handleUpdateStatus = async (id: number, status: 'CONFIRMED' | 'REJECTED') => {
+  const handleUpdateStatus = async (id: number, status: 'CONFIRMED' | 'REJECTED' | 'CANCELLED') => {
     try {
       const res = await fetch(`/api/admin/reservations/${id}/status`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'x-admin-password': password
         },
@@ -161,6 +180,7 @@ export function AdminPanel() {
     switch (status) {
       case 'CONFIRMED': return { icon: <CheckCircle2 className="w-4 h-4 text-forest" />, text: 'Aprobada', bg: 'bg-forest/10 text-forest' };
       case 'REJECTED': return { icon: <XCircle className="w-4 h-4 text-red-600" />, text: 'Rechazada', bg: 'bg-red-50 text-red-700' };
+      case 'CANCELLED': return { icon: <XCircle className="w-4 h-4 text-forest-light" />, text: 'Cancelada', bg: 'bg-forest/5 text-forest-light' };
       default: return { icon: <Clock className="w-4 h-4 text-amber-warm" />, text: 'Pendiente', bg: 'bg-amber-warm/10 text-amber-warm' };
     }
   };
@@ -178,7 +198,7 @@ export function AdminPanel() {
               <p className="text-xs text-forest-light tracking-wide uppercase font-medium">CITRO</p>
             </div>
           </div>
-          <button onClick={() => setIsAuthenticated(false)} className="text-sm font-medium text-forest-light hover:text-forest">
+          <button onClick={handleLogout} className="text-sm font-medium text-forest-light hover:text-forest">
             Cerrar Sesión
           </button>
         </div>
@@ -256,17 +276,32 @@ export function AdminPanel() {
 
                     {res.status === 'PENDING' && (
                       <div className="flex items-center gap-3 self-start md:self-center">
-                        <button 
+                        <button
                           onClick={() => handleUpdateStatus(res.id, 'REJECTED')}
                           className="px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-medium transition-colors"
                         >
                           Rechazar
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleUpdateStatus(res.id, 'CONFIRMED')}
                           className="px-4 py-2 rounded-lg bg-forest text-paper hover:bg-forest-light font-medium transition-colors"
                         >
                           Aprobar
+                        </button>
+                      </div>
+                    )}
+
+                    {res.status === 'CONFIRMED' && (
+                      <div className="flex items-center gap-3 self-start md:self-center">
+                        <button
+                          onClick={() => {
+                            if (confirm('¿Cancelar esta reserva ya confirmada? Se notificará al solicitante.')) {
+                              handleUpdateStatus(res.id, 'CANCELLED');
+                            }
+                          }}
+                          className="px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-medium transition-colors"
+                        >
+                          Cancelar reserva
                         </button>
                       </div>
                     )}

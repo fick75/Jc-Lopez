@@ -15,7 +15,7 @@ export const reservations = pgTable('reservations', {
   name: text('name').notNull(),
   email: text('email').notNull(),
   reason: text('reason').notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING, CONFIRMED, REJECTED
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING, CONFIRMED, REJECTED, CANCELLED
   token: text('token').notNull().unique(),
   createdAt: timestamp('created_at').defaultNow(),
 });

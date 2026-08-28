@@ -28,7 +28,14 @@ export function Home() {
   };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalInitialData, setModalInitialData] = useState<{ space?: string, date?: string }>({});
-  
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+
+  useEffect(() => {
+    if (!showSuccessToast) return;
+    const timer = setTimeout(() => setShowSuccessToast(false), 5000);
+    return () => clearTimeout(timer);
+  }, [showSuccessToast]);
+
   const fetchReservations = async () => {
     try {
       const res = await fetch('/api/reservations');
@@ -92,15 +99,22 @@ export function Home() {
         <RecentRequests reservations={reservations} />
       </main>
 
-      <BookingModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+      <BookingModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
         initialSpace={modalInitialData.space}
         initialDate={modalInitialData.date}
         onSuccess={() => {
           fetchReservations();
+          setShowSuccessToast(true);
         }}
       />
+
+      {showSuccessToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-forest text-paper px-6 py-3.5 rounded-xl shadow-lg flex items-center gap-2 text-sm font-medium">
+          Solicitud enviada. Te notificaremos por correo cuando sea revisada.
+        </div>
+      )}
     </div>
   );
 }

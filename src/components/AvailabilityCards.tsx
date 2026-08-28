@@ -51,6 +51,7 @@ export function AvailabilityCards({ reservations }: AvailabilityCardsProps) {
             
             <div>
               <h3 className="text-xl font-medium text-forest mb-1">{space.name}</h3>
+              <p className="text-xs text-forest-light/70 mb-1">Capacidad: {space.capacity} personas</p>
               {activeRes ? (
                 <p className="text-sm text-forest-light flex items-center gap-1.5 font-mono mt-3">
                   <Clock className="w-4 h-4" />
