@@ -1,0 +1,32 @@
+# Despliegue gratuito alternativo en Render.com (Plan B si no usas Google AI Studio).
+#
+# 1. Crea una base de datos Postgres gratuita y permanente en https://neon.tech
+#    (el plan gratuito de Render para Postgres expira a los 30 días; Neon no).
+# 2. En Render: New + -> Blueprint -> conecta este repositorio. Render detecta
+#    este archivo y crea el servicio automáticamente.
+# 3. Completa los valores marcados como "sync: false" en el panel de Render
+#    con los datos de conexión de tu base de Neon y tu contraseña de admin.
+services:
+  - type: web
+    name: reservas-espacios-citro
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SQL_SSL
+        value: "true"
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SQL_HOST
+        sync: false
+      - key: SQL_USER
+        sync: false
+      - key: SQL_PASSWORD
+        sync: false
+      - key: SQL_DB_NAME
+        sync: false
+      - key: APP_URL
+        sync: false

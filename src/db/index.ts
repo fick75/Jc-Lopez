@@ -13,6 +13,8 @@ export const createPool = () => {
       user: process.env.SQL_USER,
       password: process.env.SQL_PASSWORD,
       database: process.env.SQL_DB_NAME,
+      // Managed free databases outside AI Studio (e.g. Neon, Render) require SSL.
+      ssl: process.env.SQL_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
       max: 10,
       connectionTimeoutMillis: 15000,
     });
