@@ -2,10 +2,29 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { v4 as uuidv4 } from "uuid";
+import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
 import { db } from "./src/db/index.ts";
 import { reservations, admins } from "./src/db/schema.ts";
 import { eq, and } from "drizzle-orm";
 import { SPACES } from "./src/types.ts";
+
+function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password: string, stored: string): boolean {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) return false;
+  const candidate = scryptSync(password, salt, 64);
+  const expected = Buffer.from(hash, "hex");
+  return candidate.length === expected.length && timingSafeEqual(candidate, expected);
+}
+
+function toPublicAdmin(admin: { id: number; name: string; email: string }) {
+  return { id: admin.id, name: admin.name, email: admin.email };
+}
 
 async function startServer() {
   const app = express();
@@ -178,32 +197,95 @@ async function startServer() {
     }
   });
 
-  // Admin auth middleware
-  const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const pwd = req.headers['x-admin-password'];
-    if (!process.env.ADMIN_PASSWORD) {
-      console.warn("ADMIN_PASSWORD not set in env");
-      return res.status(500).json({ error: "Server configuration error" });
+  // Admin auth middleware: validates per-admin credentials sent as headers
+  const adminAuth = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    try {
+      const email = req.headers['x-admin-email'];
+      const password = req.headers['x-admin-password'];
+      if (typeof email !== 'string' || typeof password !== 'string') {
+        return res.status(401).json({ error: "No autorizado" });
+      }
+
+      const found = await db.select().from(admins).where(eq(admins.email, email.toLowerCase().trim()));
+      if (found.length === 0 || !verifyPassword(password, found[0].password)) {
+        return res.status(401).json({ error: "No autorizado" });
+      }
+
+      (req as any).adminUser = found[0];
+      next();
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
-    if (pwd !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    next();
   };
 
-  app.post("/api/admin/login", (req, res) => {
-    const { password } = req.body;
-    if (password === process.env.ADMIN_PASSWORD) {
-      res.json({ success: true });
-    } else {
-      res.status(401).json({ error: "Contraseña incorrecta" });
+  // Whether any administrator account exists yet (first-run setup)
+  app.get("/api/admin/setup-status", async (req, res) => {
+    try {
+      const count = await db.select().from(admins);
+      res.json({ needsSetup: count.length === 0 });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // One-time setup: creates the very first admin account, gated by the
+  // ADMIN_PASSWORD env var so a stranger can't self-register as admin.
+  app.post("/api/admin/setup", async (req, res) => {
+    try {
+      const { masterKey, name, email, password } = req.body;
+
+      if (!process.env.ADMIN_PASSWORD) {
+        return res.status(500).json({ error: "El servidor no tiene configurada la clave maestra (ADMIN_PASSWORD)" });
+      }
+      if (masterKey !== process.env.ADMIN_PASSWORD) {
+        return res.status(401).json({ error: "Clave maestra incorrecta" });
+      }
+      if (!name || !email || !password) {
+        return res.status(400).json({ error: "Nombre, correo y contraseña son requeridos" });
+      }
+      if (password.length < 8) {
+        return res.status(400).json({ error: "La contraseña debe tener al menos 8 caracteres" });
+      }
+
+      const existing = await db.select().from(admins);
+      if (existing.length > 0) {
+        return res.status(400).json({ error: "La configuración inicial ya se completó. Inicia sesión normalmente." });
+      }
+
+      const newAdmin = await db.insert(admins).values({
+        name,
+        email: email.toLowerCase().trim(),
+        password: hashPassword(password),
+      }).returning();
+
+      res.status(201).json(toPublicAdmin(newAdmin[0]));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/admin/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: "Correo y contraseña son requeridos" });
+      }
+
+      const found = await db.select().from(admins).where(eq(admins.email, email.toLowerCase().trim()));
+      if (found.length === 0 || !verifyPassword(password, found[0].password)) {
+        return res.status(401).json({ error: "Credenciales incorrectas" });
+      }
+
+      res.json({ success: true, admin: toPublicAdmin(found[0]) });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 
   app.get("/api/admin/admins", adminAuth, async (req, res) => {
     try {
       const allAdmins = await db.select().from(admins);
-      res.json(allAdmins);
+      res.json(allAdmins.map(toPublicAdmin));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -211,10 +293,24 @@ async function startServer() {
 
   app.post("/api/admin/admins", adminAuth, async (req, res) => {
     try {
-      const { name, email } = req.body;
-      const newAdmin = await db.insert(admins).values({ name, email }).returning();
-      res.json(newAdmin[0]);
+      const { name, email, password } = req.body;
+      if (!name || !email || !password) {
+        return res.status(400).json({ error: "Nombre, correo y contraseña son requeridos" });
+      }
+      if (password.length < 8) {
+        return res.status(400).json({ error: "La contraseña debe tener al menos 8 caracteres" });
+      }
+
+      const newAdmin = await db.insert(admins).values({
+        name,
+        email: email.toLowerCase().trim(),
+        password: hashPassword(password),
+      }).returning();
+      res.status(201).json(toPublicAdmin(newAdmin[0]));
     } catch (error: any) {
+      if (error.code === '23505') {
+        return res.status(400).json({ error: "Ya existe un administrador con ese correo" });
+      }
       res.status(500).json({ error: error.message });
     }
   });
@@ -222,7 +318,19 @@ async function startServer() {
   app.delete("/api/admin/admins/:id", adminAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      await db.delete(admins).where(eq(admins.id, parseInt(id)));
+      const targetId = parseInt(id);
+      const requester = (req as any).adminUser;
+
+      if (requester.id === targetId) {
+        return res.status(400).json({ error: "No puedes eliminar tu propia cuenta mientras tienes la sesión iniciada" });
+      }
+
+      const allAdmins = await db.select().from(admins);
+      if (allAdmins.length <= 1) {
+        return res.status(400).json({ error: "Debe quedar al menos un administrador" });
+      }
+
+      await db.delete(admins).where(eq(admins.id, targetId));
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
