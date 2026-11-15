@@ -1,6 +1,6 @@
 import React from 'react';
 import { Reservation, SPACES } from '../types';
-import { Leaf, Users, Presentation, Clock, CheckCircle2, GraduationCap } from 'lucide-react';
+import { Leaf, Users, Presentation, Clock, CheckCircle2, GraduationCap, Trees } from 'lucide-react';
 import { isWithinInterval, parse, format } from 'date-fns';
 
 interface AvailabilityCardsProps {
@@ -30,12 +30,13 @@ export function AvailabilityCards({ reservations }: AvailabilityCardsProps) {
       case 'posgrado': return <Leaf className="w-8 h-8 opacity-80" />;
       case 'auditorio': return <Presentation className="w-8 h-8 opacity-80" />;
       case 'estudiantes': return <GraduationCap className="w-8 h-8 opacity-80" />;
+      case 'agrobosque': return <Trees className="w-8 h-8 opacity-80" />;
       default: return <CheckCircle2 className="w-8 h-8 opacity-80" />;
     }
   };
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-12">
       {SPACES.map(space => {
         const activeRes = getSpaceStatus(space.name);
         
