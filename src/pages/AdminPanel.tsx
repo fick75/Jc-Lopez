@@ -243,7 +243,11 @@ export function AdminPanel() {
   };
 
   if (checkingSetup) {
-    return <div className="min-h-screen bg-paper" />;
+    return (
+      <div className="min-h-screen bg-paper flex items-center justify-center">
+        <Loader2 className="w-6 h-6 text-forest-light animate-spin" />
+      </div>
+    );
   }
 
   if (needsSetup) {

@@ -23,6 +23,11 @@ export function Home() {
       } else {
         document.documentElement.classList.remove('dark');
       }
+      try {
+        localStorage.setItem('citro_theme', newMode ? 'dark' : 'light');
+      } catch {
+        // Ignore storage errors (private browsing, etc.) — theme just won't persist.
+      }
       return newMode;
     });
   };

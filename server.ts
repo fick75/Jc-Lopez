@@ -26,6 +26,29 @@ function toPublicAdmin(admin: { id: number; name: string; email: string }) {
   return { id: admin.id, name: admin.name, email: admin.email };
 }
 
+function renderActionPage(title: string, bodyHtml: string): string {
+  return `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${title} · Espacios CITRO</title>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;background:#F3F4F0;color:#1A3C34;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;}
+  .card{background:#fff;border-radius:16px;padding:32px;max-width:420px;width:100%;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center;}
+  h1{font-size:1.3rem;margin:0 0 12px;}
+  p{line-height:1.5;color:#2A5A4F;}
+  button{margin-top:20px;padding:12px 24px;border:none;border-radius:10px;background:#1A3C34;color:#fff;font-size:1rem;cursor:pointer;}
+  button.reject{background:#fff;color:#dc2626;border:1px solid #fecaca;}
+</style>
+</head>
+<body><div class="card"><h1>${title}</h1>${bodyHtml}</div></body>
+</html>`;
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^\d{2}:\d{2}$/;
+
 async function startServer() {
   const app = express();
   app.use(express.json());
@@ -55,6 +78,10 @@ async function startServer() {
       // Basic validation
       if (!space || !date || !startTime || !endTime || !name || !email || !reason) {
         return res.status(400).json({ error: "Todos los campos son requeridos" });
+      }
+
+      if (!DATE_RE.test(date) || !TIME_RE.test(startTime) || !TIME_RE.test(endTime)) {
+        return res.status(400).json({ error: "Formato de fecha u hora inválido" });
       }
 
       if (startTime >= endTime) {
@@ -120,19 +147,57 @@ async function startServer() {
     }
   });
 
+  // Links from admin emails land here. This is a plain GET so email clients and
+  // security scanners that silently prefetch links can't trigger it: it only ever
+  // shows a confirmation page, and the actual change happens on the POST below,
+  // which only fires when a human clicks the button.
   app.get("/api/reservations/:token/approve", async (req, res) => {
     try {
       const token = req.params.token;
       const reservationArray = await db.select().from(reservations).where(eq(reservations.token, token));
-      
+
       if (reservationArray.length === 0) {
-        return res.status(404).send("Solicitud no encontrada.");
+        return res.status(404).send(renderActionPage("Solicitud no encontrada", "<p>Esta solicitud no existe o el enlace ya no es válido.</p>"));
       }
-      
+
       const reservation = reservationArray[0];
-      
+
       if (reservation.status !== 'PENDING') {
-        return res.status(400).send(`Esta solicitud ya fue ${reservation.status === 'CONFIRMED' ? 'APROBADA' : 'RECHAZADA'}.`);
+        return res.send(renderActionPage(
+          "Solicitud ya resuelta",
+          `<p>Esta solicitud ya fue ${reservation.status === 'CONFIRMED' ? 'APROBADA' : reservation.status === 'CANCELLED' ? 'CANCELADA' : 'RECHAZADA'}.</p>`
+        ));
+      }
+
+      res.send(renderActionPage(
+        "Confirmar aprobación",
+        `<p>¿Aprobar <strong>${reservation.space}</strong> el ${reservation.date} de ${reservation.startTime} a ${reservation.endTime} para ${reservation.name}?</p>
+         <form method="POST" action="/api/reservations/${token}/approve">
+           <button type="submit">Confirmar aprobación</button>
+         </form>`
+      ));
+    } catch (error: any) {
+      console.error(error);
+      res.status(500).send(renderActionPage("Error", "<p>Error interno del servidor.</p>"));
+    }
+  });
+
+  app.post("/api/reservations/:token/approve", async (req, res) => {
+    try {
+      const token = req.params.token;
+      const reservationArray = await db.select().from(reservations).where(eq(reservations.token, token));
+
+      if (reservationArray.length === 0) {
+        return res.status(404).send(renderActionPage("Solicitud no encontrada", "<p>Esta solicitud no existe o el enlace ya no es válido.</p>"));
+      }
+
+      const reservation = reservationArray[0];
+
+      if (reservation.status !== 'PENDING') {
+        return res.send(renderActionPage(
+          "Solicitud ya resuelta",
+          `<p>Esta solicitud ya fue ${reservation.status === 'CONFIRMED' ? 'APROBADA' : reservation.status === 'CANCELLED' ? 'CANCELADA' : 'RECHAZADA'}.</p>`
+        ));
       }
 
       // Check conflict again just in case another was approved meanwhile
@@ -143,27 +208,27 @@ async function startServer() {
           eq(reservations.status, 'CONFIRMED')
         )
       );
-      
+
       const hasConflict = overlappingStrict.some(existing => {
         return reservation.startTime < existing.endTime && reservation.endTime > existing.startTime;
       });
 
       if (hasConflict) {
-        return res.status(400).send("No se puede aprobar. Hay un conflicto de horario con una reserva ya confirmada.");
+        return res.send(renderActionPage("No se puede aprobar", "<p>Hay un conflicto de horario con una reserva ya confirmada.</p>"));
       }
 
       await db.update(reservations).set({ status: 'CONFIRMED' }).where(eq(reservations.token, token));
-      
+
       sendEmail(
         reservation.email,
         "Tu solicitud de espacio en CITRO fue APROBADA",
         `Hola ${reservation.name},\n\nTu solicitud para usar ${reservation.space} el día ${reservation.date} de ${reservation.startTime} a ${reservation.endTime} ha sido APROBADA.\n\n¡Gracias!`
       );
-      
-      res.send(`<h1>Solicitud Aprobada</h1><p>Se ha notificado al solicitante.</p>`);
+
+      res.send(renderActionPage("Solicitud aprobada", "<p>Se ha notificado al solicitante.</p>"));
     } catch (error: any) {
       console.error(error);
-      res.status(500).send("Error interno del servidor.");
+      res.status(500).send(renderActionPage("Error", "<p>Error interno del servidor.</p>"));
     }
   });
 
@@ -171,29 +236,63 @@ async function startServer() {
     try {
       const token = req.params.token;
       const reservationArray = await db.select().from(reservations).where(eq(reservations.token, token));
-      
+
       if (reservationArray.length === 0) {
-        return res.status(404).send("Solicitud no encontrada.");
+        return res.status(404).send(renderActionPage("Solicitud no encontrada", "<p>Esta solicitud no existe o el enlace ya no es válido.</p>"));
       }
-      
+
       const reservation = reservationArray[0];
-      
+
       if (reservation.status !== 'PENDING') {
-        return res.status(400).send(`Esta solicitud ya fue ${reservation.status === 'CONFIRMED' ? 'APROBADA' : 'RECHAZADA'}.`);
+        return res.send(renderActionPage(
+          "Solicitud ya resuelta",
+          `<p>Esta solicitud ya fue ${reservation.status === 'CONFIRMED' ? 'APROBADA' : reservation.status === 'CANCELLED' ? 'CANCELADA' : 'RECHAZADA'}.</p>`
+        ));
+      }
+
+      res.send(renderActionPage(
+        "Confirmar rechazo",
+        `<p>¿Rechazar <strong>${reservation.space}</strong> el ${reservation.date} de ${reservation.startTime} a ${reservation.endTime} para ${reservation.name}?</p>
+         <form method="POST" action="/api/reservations/${token}/reject">
+           <button type="submit" class="reject">Confirmar rechazo</button>
+         </form>`
+      ));
+    } catch (error: any) {
+      console.error(error);
+      res.status(500).send(renderActionPage("Error", "<p>Error interno del servidor.</p>"));
+    }
+  });
+
+  app.post("/api/reservations/:token/reject", async (req, res) => {
+    try {
+      const token = req.params.token;
+      const reservationArray = await db.select().from(reservations).where(eq(reservations.token, token));
+
+      if (reservationArray.length === 0) {
+        return res.status(404).send(renderActionPage("Solicitud no encontrada", "<p>Esta solicitud no existe o el enlace ya no es válido.</p>"));
+      }
+
+      const reservation = reservationArray[0];
+
+      if (reservation.status !== 'PENDING') {
+        return res.send(renderActionPage(
+          "Solicitud ya resuelta",
+          `<p>Esta solicitud ya fue ${reservation.status === 'CONFIRMED' ? 'APROBADA' : reservation.status === 'CANCELLED' ? 'CANCELADA' : 'RECHAZADA'}.</p>`
+        ));
       }
 
       await db.update(reservations).set({ status: 'REJECTED' }).where(eq(reservations.token, token));
-      
+
       sendEmail(
         reservation.email,
         "Tu solicitud de espacio en CITRO fue RECHAZADA",
         `Hola ${reservation.name},\n\nLamentamos informarte que tu solicitud para usar ${reservation.space} el día ${reservation.date} de ${reservation.startTime} a ${reservation.endTime} ha sido RECHAZADA.\n\nSi tienes dudas, contacta a la administración.`
       );
-      
-      res.send(`<h1>Solicitud Rechazada</h1><p>Se ha notificado al solicitante.</p>`);
+
+      res.send(renderActionPage("Solicitud rechazada", "<p>Se ha notificado al solicitante.</p>"));
     } catch (error: any) {
       console.error(error);
-      res.status(500).send("Error interno del servidor.");
+      res.status(500).send(renderActionPage("Error", "<p>Error interno del servidor.</p>"));
     }
   });
 

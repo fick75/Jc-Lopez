@@ -7,6 +7,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@300..800&display=swap" rel="stylesheet">
     <title>Reserva de Espacios CITRO</title>
+    <script>
+      // Applied before paint so the page never flashes the wrong theme on load.
+      try {
+        if (localStorage.getItem('citro_theme') === 'dark') {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
